@@ -1,0 +1,45 @@
+.search-line {
+    display: flex;
+    position: relative;
+    flex-direction: column;
+    padding-top: 10px;
+
+    &__input {
+        padding: 10px;
+        border-radius: 5px;
+        border: 1px solid;
+        font-size: 1.2rem;
+    }
+
+    &__result {
+        display: none;
+        position: absolute;
+        z-index: 99;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background-color: #fff;
+
+        &_shown {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid;
+            gap: 5px;
+            padding: 5px;
+        }
+    }
+
+    &__result-item {
+        font-weight: 600;
+        color: blue;
+
+        &:hover {
+            color: red;
+            cursor: pointer;
+        }
+
+        &_history {
+            color: orange;
+        }
+    }
+}
