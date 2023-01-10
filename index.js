@@ -1,9 +1,14 @@
-import { loadAnimeList, loadAnimeDetails } from '/api.js';
-
-const HISTORY_CURSOR_KEY = 'history_cursor';
-const HISTORY_MAX_LENGTH_KEY = 'history_max';
-const HISTORY_COUNT_KEY = 'history_count';
-const HISTORY_MAX_LENGTH = 100;
+import { loadAnimeList, loadAnimeDetails } from '/api';
+import { debounce, clearHTMLContainer } from '/utils';
+import {
+    historyIsEmpty,
+    getHistoryItemsCount,
+    getFromHistory,
+    findInHistory,
+    saveToHistory,
+    historyIncludesId,
+    initHistory,
+} from '/history';
 
 const request = document.getElementById('request');
 const searchResult = document.getElementById('searchResult');
@@ -12,115 +17,18 @@ const history = document.getElementById('history');
 const error = document.getElementById('error');
 
 (async () => {
+    // init history
+    try {
+        initHistory(createHistoryLinks);
+    } catch (e) {
+        error.innerHTML = e.message;
+    }
+
     // show history if not empty
-    if (localStorage.length > 3) {
+    if (!historyIsEmpty()) {
         createHistoryLinks();
     } else {
         history.classList.add('history_hide');
-    }
-
-    // save history parameters if not
-    if (!localStorage.getItem(HISTORY_CURSOR_KEY)) {
-        localStorage.setItem(HISTORY_CURSOR_KEY, 0);
-    }
-    if (!localStorage.getItem(HISTORY_MAX_LENGTH_KEY)) {
-        localStorage.setItem(HISTORY_MAX_LENGTH_KEY, HISTORY_MAX_LENGTH);
-    }
-    if (!localStorage.getItem(HISTORY_COUNT_KEY)) {
-        localStorage.setItem(HISTORY_COUNT_KEY, 0);
-    }
-
-    // listen to an event onstorage
-    window.addEventListener('storage', () => {
-        createHistoryLinks();
-    });
-
-    function clearContainer(container) {
-        while (container.firstChild) {
-            container.removeChild(container.firstChild);
-        }
-    }
-
-    function findInStorage(str) {
-        const result = [];
-        if (localStorage.length <= 3) {
-            return [];
-        }
-        try {
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key !== HISTORY_CURSOR_KEY && key !== HISTORY_COUNT_KEY && key !== HISTORY_MAX_LENGTH_KEY) {
-                    const value = JSON.parse(localStorage.getItem(key));
-                    const regex = new RegExp(str.toLowerCase());
-                    if (regex.test(value.animeTitle.toLowerCase())) {
-                        result.push(value);
-                    }
-                }
-            }
-        } catch (e) {
-            error.innerHTML = 'History error, please update the page';
-        }
-
-        return result;
-    }
-
-    function storageIncludesId(id) {
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key !== HISTORY_CURSOR_KEY && key !== HISTORY_COUNT_KEY && key !== HISTORY_MAX_LENGTH_KEY) {
-                const value = JSON.parse(localStorage.getItem(key));
-                if (value.animeId === id) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    function saveToStorage(id, title) {
-        let cursor = Number(localStorage.getItem(HISTORY_CURSOR_KEY));
-        let count = Number(localStorage.getItem(HISTORY_COUNT_KEY));
-        const max = Number(localStorage.getItem(HISTORY_MAX_LENGTH_KEY));
-        // find same animeId
-        if (storageIncludesId(id)) {
-            return;
-        }
-        // save if not find
-        try {
-            localStorage.setItem(
-                cursor,
-                JSON.stringify({
-                    animeId: id,
-                    animeTitle: title,
-                })
-            );
-            cursor = (cursor + 1) % max;
-            if (count < max) {
-                count += 1;
-                localStorage.setItem(HISTORY_COUNT_KEY, count);
-            }
-            localStorage.setItem(HISTORY_CURSOR_KEY, cursor);
-        } catch (e) {
-            error.innerHTML = 'History error, please update the page';
-        }
-    }
-
-    function getItemFromStorage(index) {
-        const count = Number(localStorage.getItem(HISTORY_COUNT_KEY));
-        if (count && index >= count) {
-            throw new RangeError('index very big');
-        }
-        const cursor = Number(localStorage.getItem(HISTORY_CURSOR_KEY));
-        const max = Number(localStorage.getItem(HISTORY_MAX_LENGTH_KEY));
-        let itemIndex = cursor - 1 - index;
-        if (itemIndex < 0) {
-            itemIndex += max;
-        }
-        return JSON.parse(localStorage.getItem(itemIndex));
-    }
-
-    function getStorageItemCount() {
-        return Number(localStorage.getItem(HISTORY_COUNT_KEY));
     }
 
     function showRequestResult(items) {
@@ -131,7 +39,7 @@ const error = document.getElementById('error');
         if (items.length === 0) {
             return;
         }
-        clearContainer(searchResult);
+        clearHTMLContainer(searchResult);
         for (let i = 0; i < items.length; i++) {
             if (i >= MAX_COUNT_TO_SHOW) {
                 break;
@@ -144,20 +52,20 @@ const error = document.getElementById('error');
 
     async function showDetails(id) {
         const details = await loadAnimeDetails(id);
-        clearContainer(searchContent);
+        clearHTMLContainer(searchContent);
         searchContent.appendChild(createDetailsNode(details));
         return details;
     }
 
     function createHistoryLinks() {
-        const historyCount = getStorageItemCount();
+        const historyCount = getHistoryItemsCount();
         if (historyCount === 0) {
             return;
         }
         const MAX_HISTORY_LIKNS_TO_SHOW = 3;
         try {
             history.classList.remove('history_hide');
-            clearContainer(history);
+            clearHTMLContainer(history);
             const title = document.createElement('h2');
             title.classList.add('heading', 'heading_level-2');
             title.textContent = 'Recent results:';
@@ -166,7 +74,7 @@ const error = document.getElementById('error');
                 if (i >= historyCount) {
                     break;
                 }
-                const data = getItemFromStorage(i);
+                const data = getFromHistory(i);
                 const link = document.createElement('a');
                 link.href = '#';
                 link.textContent = data.animeTitle;
@@ -178,7 +86,7 @@ const error = document.getElementById('error');
                 history.appendChild(link);
             }
         } catch (e) {
-            error.innerHTML = 'History error, please update the page';
+            error.innerHTML = e.message;
         }
     }
 
@@ -224,9 +132,9 @@ const error = document.getElementById('error');
         item.appendChild(value);
         item.addEventListener('click', () => {
             const id = item.getElementsByTagName('input')[0].value;
-            request.value = id;
+            request.value = data.animeTitle;
             handleActiveId(id);
-            clearContainer(searchResult);
+            clearHTMLContainer(searchResult);
             searchResult.classList.remove('search-line__result_shown');
         });
 
@@ -237,7 +145,7 @@ const error = document.getElementById('error');
         try {
             const details = await showDetails(id);
             // save to storage
-            saveToStorage(id, details.animeTitle);
+            saveToHistory(id, details.animeTitle);
             // update the history links
             createHistoryLinks();
         } catch (e) {
@@ -245,8 +153,9 @@ const error = document.getElementById('error');
         }
     }
 
-    request.addEventListener('input', async (event) => {
+    async function handleRequestInput(event) {
         const MIN_QUERY_LENGTH = 2;
+        const MAX_HISTORY_ITEMS = 5;
         const value = event.target.value;
         if (value.length < MIN_QUERY_LENGTH) {
             return;
@@ -254,33 +163,43 @@ const error = document.getElementById('error');
         try {
             const data = await loadAnimeList(value);
             // get items from storage
-            const historyInStorage = findInStorage(value).map((item) => ({ ...item, isHistory: true }));
+            const historyInStorage = findInHistory(value)
+                .map((item) => ({ ...item, isHistory: true }))
+                .slice(0, MAX_HISTORY_ITEMS);
             const itemsToShow = historyInStorage.concat(
-                data.filter((item) => !storageIncludesId(item.animeId)).map((item) => ({ ...item, isHistory: false }))
+                data.filter((item) => !historyIncludesId(item.animeId)).map((item) => ({ ...item, isHistory: false }))
             );
             showRequestResult(itemsToShow);
         } catch (e) {
             error.innerHTML = 'Cant show results, please update the page';
         }
-    });
+    }
 
-    request.addEventListener('focus', (event) => {
+    function handleRequestFocus(event) {
         try {
             const value = event.target.value;
             if (value === '') {
-                const historyInStorage = findInStorage(value).map((item) => ({ ...item, isHistory: true }));
+                const historyInStorage = findInHistory(value).map((item) => ({ ...item, isHistory: true }));
                 showRequestResult(historyInStorage);
             }
         } catch (e) {
             error.innerHTML = 'Cant show results, please update the page';
         }
-    });
+    }
 
-    document.addEventListener('click', (event) => {
+    function handleDocumentClick(event) {
         if (event.target === request) {
             return;
         }
-        clearContainer(searchResult);
+        clearHTMLContainer(searchResult);
         searchResult.classList.remove('search-line__result_shown');
-    });
+    }
+
+    const debouncedHandleInput = debounce(handleRequestInput, 500);
+
+    request.addEventListener('input', debouncedHandleInput);
+
+    request.addEventListener('focus', handleRequestFocus);
+
+    document.addEventListener('click', handleDocumentClick);
 })();
