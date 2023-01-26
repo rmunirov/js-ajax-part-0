@@ -1,6 +1,7 @@
 {
   "name": "js-ajax-part-0",
   "version": "1.0.0",
+  "main": "index.js",
   "repository": "git@github.com:rmunirov/js-ajax-part-0.git",
   "author": "'Rail Munirov'",
   "license": "MIT",
