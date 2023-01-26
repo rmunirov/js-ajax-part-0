@@ -3,6 +3,9 @@ const HISTORY_MAX_LENGTH_KEY = 'history_max';
 const HISTORY_COUNT_KEY = 'history_count';
 const HISTORY_MAX_LENGTH = 100;
 
+const fallback = { animeId: '', animeTitle: '' };
+let storageCallbackCopy = null;
+
 function safeLocalStorageSet(key, value) {
     try {
         localStorage.setItem(key, value);
@@ -23,9 +26,8 @@ export function initHistory(callback) {
     }
 
     // listen to an event onstorage
-    window.addEventListener('storage', () => {
-        callback();
-    });
+    storageCallbackCopy = callback;
+    window.addEventListener('storage', storageCallbackCopy);
 }
 
 export function findInHistory(str) {
@@ -33,39 +35,41 @@ export function findInHistory(str) {
     if (historyIsEmpty()) {
         return [];
     }
-    try {
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key !== HISTORY_CURSOR_KEY && key !== HISTORY_COUNT_KEY && key !== HISTORY_MAX_LENGTH_KEY) {
-                const value = JSON.parse(localStorage.getItem(key));
-                const regex = new RegExp(str.toLowerCase());
-                if (regex.test(value.animeTitle.toLowerCase())) {
-                    result.push(value);
-                }
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        let value = {};
+        if (key !== HISTORY_CURSOR_KEY && key !== HISTORY_COUNT_KEY && key !== HISTORY_MAX_LENGTH_KEY) {
+            try {
+                value = JSON.parse(localStorage.getItem(key));
+            } catch (e) {
+                value = fallback;
+            }
+            const regex = new RegExp(str.toLowerCase());
+            if (regex.test(value.animeTitle.toLowerCase())) {
+                result.push(value);
             }
         }
-    } catch (e) {
-        throw new Error('History error, please update the page');
     }
 
     return result;
 }
 
 export function historyIncludesId(id) {
-    try {
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key !== HISTORY_CURSOR_KEY && key !== HISTORY_COUNT_KEY && key !== HISTORY_MAX_LENGTH_KEY) {
-                const value = JSON.parse(localStorage.getItem(key));
-                if (value.animeId === id) {
-                    return true;
-                }
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key !== HISTORY_CURSOR_KEY && key !== HISTORY_COUNT_KEY && key !== HISTORY_MAX_LENGTH_KEY) {
+            let value = {};
+            try {
+                value = JSON.parse(localStorage.getItem(key));
+            } catch (error) {
+                value = fallback;
+            }
+            if (value.animeId === id) {
+                return true;
             }
         }
-        return false;
-    } catch (error) {
-        throw new Error('History error, please update the page');
     }
+    return false;
 }
 
 export function saveToHistory(id, title) {
@@ -98,27 +102,23 @@ export function saveToHistory(id, title) {
 }
 
 export function getFromHistory(index) {
-    try {
-        const count = Number(localStorage.getItem(HISTORY_COUNT_KEY));
-        if (count && index >= count) {
-            throw new RangeError('Passed index very big');
-        }
-        const cursor = Number(localStorage.getItem(HISTORY_CURSOR_KEY));
-        const max = Number(localStorage.getItem(HISTORY_MAX_LENGTH_KEY));
-        if (!cursor || !max) {
-            throw new Error('History error, please update the page');
-        }
-        let itemIndex = cursor - 1 - index;
-        if (itemIndex < 0) {
-            itemIndex += max;
-        }
-        return JSON.parse(localStorage.getItem(itemIndex));
-    } catch (error) {
-        if (error instanceof SyntaxError) {
-            throw new Error('History error, please update the page');
-        }
-        throw error;
+    const count = Number(localStorage.getItem(HISTORY_COUNT_KEY));
+    const cursor = Number(localStorage.getItem(HISTORY_CURSOR_KEY));
+    const max = Number(localStorage.getItem(HISTORY_MAX_LENGTH_KEY));
+    if (!count || !cursor || !max) {
+        localStorage.clear();
+        window.removeEventListener('storage', storageCallbackCopy);
+        initHistory(storageCallbackCopy);
+        return null;
     }
+    if (index >= count) {
+        return null;
+    }
+    let itemIndex = cursor - 1 - index;
+    if (itemIndex < 0) {
+        itemIndex += max;
+    }
+    return JSON.parse(localStorage.getItem(itemIndex));
 }
 
 export function getHistoryItemsCount() {

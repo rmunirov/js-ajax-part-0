@@ -75,6 +75,9 @@ const error = document.getElementById('error');
                     break;
                 }
                 const data = getFromHistory(i);
+                if (!data) {
+                    break;
+                }
                 const link = document.createElement('a');
                 link.href = '#';
                 link.textContent = data.animeTitle;
